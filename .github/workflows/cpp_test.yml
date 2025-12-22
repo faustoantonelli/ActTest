@@ -3,7 +3,7 @@ name: C++ Docker Stress Tester
 on:
   push:
     branches: ["**"]
-    paths: ["**.py", "**.js", "**.cpp"]
+    paths: ["**.py", "**.js", "**.ts", "**.cpp", "**.m"] # Aggiunto .m
 
 jobs:
   stress-test:
