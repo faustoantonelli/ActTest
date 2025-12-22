@@ -1,0 +1,35 @@
+name: C++ Docker Stress Tester
+
+on:
+  push:
+    branches: ["**"]
+    paths: ["**.py", "**.js", "**.cpp"]
+
+jobs:
+  stress-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Trova file modificato
+        id: find_file
+        run: |
+          # Identifica l'ultimo file modificato tra quelli supportati
+          FILE=$(git diff --name-only HEAD^ HEAD | grep -E '\.(py|js|cpp)$' | head -1)
+          echo "target=$FILE" >> $GITHUB_OUTPUT
+
+      - name: Build Docker
+        if: steps.find_file.outputs.target != ''
+        run: docker build -t cpp-tester .
+
+      - name: Run Test
+        if: steps.find_file.outputs.target != ''
+        run: |
+          # Avvia il container passando il file come variabile
+          docker run --rm \
+            -v ${{ github.workspace }}:/app \
+            -e TARGET_FILE=/app/${{ steps.find_file.outputs.target }} \
+            cpp-tester /app/${{ steps.find_file.outputs.target }}
