@@ -3,64 +3,42 @@
 #include <string>
 #include <cstdlib>
 #include <ctime>
-#include <algorithm>
 
-// Funzione per estrarre l'estensione del file
-std::string get_extension(const std::string& filename) {
-    size_t last_dot = filename.find_last_of(".");
-    if (last_dot == std::string::npos) return "";
-    return filename.substr(last_dot);
-}
-
-int run_test(std::string cmd, int input_val) {
-    // Usiamo una pipe per inviare l'input e nascondere l'output standard
-    std::string full_cmd = "echo " + std::to_string(input_val) + " | " + cmd + " > /dev/null 2>&1";
-    return std::system(full_cmd.c_str());
+void debug_log(std::string msg) {
+    std::cout << "[DEBUGGER] " << msg << std::endl;
 }
 
 int main(int argc, char* argv[]) {
     if (argc < 2) return 1;
     std::string target = argv[1];
-    std::string ext = get_extension(target);
-    std::string cmd;
 
-    // --- LOGICA MULTI-LINGUAGGIO ---
-    if (ext == ".cpp") {
-        std::cout << "🔨 Compilazione C++ in corso..." << std::endl;
-        if (std::system(("g++ " + target + " -o ./user_bin").c_str()) != 0) return 1;
-        cmd = "./user_bin";
-    } 
-    else if (ext == ".py") {
-        cmd = "python3 " + target;
-    } 
-    else if (ext == ".js") {
-        cmd = "node " + target;
-    } 
-    else if (ext == ".ts") {
-        // Per TypeScript usiamo ts-node (che installeremo nel Dockerfile)
-        cmd = "ts-node " + target;
-    } 
-    else if (ext == ".m") {
-        // --quiet sopprime il messaggio di benvenuto, --no-gui evita l'interfaccia
-        cmd = "octave --quiet --no-gui " + target;
-    }
-    else {
-        std::cerr << "❌ Estensione " << ext << " non supportata!" << std::endl;
-        return 1;
-    }
+    // --- STEP 1: ANALISI STATICA (Cerca bug nel testo del codice) ---
+    debug_log("Analisi statica con Cppcheck...");
+    std::system(("cppcheck --error-exitcode=1 " + target).c_str());
 
-    // Dataset di stress
-    std::vector<int> inputs = {0, 1, -1, 1000, 2147483647, -2147483648};
-    
-    std::cout << "🚀 Testando: " << target << " con " << inputs.size() << " casi critici..." << std::endl;
+    // --- STEP 2: COMPILAZIONE CON SANITIZERS (Rileva errori di memoria) ---
+    debug_log("Compilazione con AddressSanitizer...");
+    std::string compile_cmd = "g++ -fsanitize=address,undefined -g " + target + " -o ./debug_bin";
+    if (std::system(compile_cmd.c_str()) != 0) return 1;
 
-    for (int val : inputs) {
-        if (run_test(cmd, val) != 0) {
-            std::cerr << "🔴 FALLITO! Crash con input: " << val << std::endl;
+    // --- STEP 3: FUZZING (Bombardamento di input casuali) ---
+    debug_log("Avvio bombardamento input casuali...");
+    std::vector<std::string> junk_inputs = {
+        "0", "-1", "2147483647", "NaN", "infinity", " ", "", 
+        "!!!!!!!!!!!!!!!!!!!!!!!!!!", "0.0000000000001", "NULL"
+    };
+
+    for (const auto& input : junk_inputs) {
+        std::string run_cmd = "echo '" + input + "' | ./debug_bin > /dev/null 2>&1";
+        int result = std::system(run_cmd.c_str());
+        
+        if (result != 0) {
+            std::cerr << "❌ CRASH RILEVATO!" << std::endl;
+            std::cerr << "Input colpevole: " << input << std::endl;
             return 1;
         }
     }
 
-    std::cout << "🟢 ECCELLENTE! Il codice ha superato tutti i test." << std::endl;
+    debug_log("✅ Il codice è tecnicamente solido.");
     return 0;
 }
