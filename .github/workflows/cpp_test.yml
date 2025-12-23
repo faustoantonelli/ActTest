@@ -3,8 +3,8 @@ name: Build and Test System
 on:
   push:
     paths:
-      - 'docker/**'      # Se cambia il Dockerfile o il tester
-      - '**.cpp'         # Se cambia il codice del Traction Control
+      - 'docker/**'
+      - '**.cpp'
       - '**.py'
       - '**.m'
       - '**.tex'
@@ -22,14 +22,21 @@ jobs:
         with:
           fetch-depth: 2
 
-      # 1. IDENTIFICAZIONE FILE (La logica di prima)
+      # 1. TRASFORMA IL NOME IN MINUSCOLO (Nuovo step fondamentale)
+      - name: Prepare Repository Name
+        id: repo_name
+        run: |
+          # Trasforma "faustoantonelli/ActTest" in "faustoantonelli/acttest"
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "lowercase=$REPO_LOWER" >> $GITHUB_OUTPUT
+
+      # 2. IDENTIFICAZIONE FILE
       - name: Trova file modificato
         id: find_file
         run: |
           FILE=$(git diff --name-only HEAD^ HEAD | grep -E '\.(cpp|py|m|tex)$' | head -1)
           echo "target=$FILE" >> $GITHUB_OUTPUT
 
-      # 2. SETUP DOCKER (Per pubblicare l'immagine)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -40,21 +47,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 3. BUILD AND PUSH (Solo se cambia la cartella docker)
+      # 3. BUILD AND PUSH (Usando il nome minuscolo)
       - name: Build and push image
         uses: docker/build-push-action@v4
         with:
           context: ./docker/
           file: ./docker/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}:latest
+          # Usiamo l'output dello step repo_name
+          tags: ghcr.io/${{ steps.repo_name.outputs.lowercase }}:latest
 
-      # 4. ESECUZIONE TEST (Sempre, se c'è un file da testare)
+      # 4. ESECUZIONE TEST
       - name: Run Universal Tester
         if: steps.find_file.outputs.target != ''
         run: |
-          # Usiamo l'immagine appena caricata (o quella già esistente)
-          docker pull ghcr.io/${{ github.repository }}:latest
+          IMAGE_NAME="ghcr.io/${{ steps.repo_name.outputs.lowercase }}:latest"
+          docker pull $IMAGE_NAME
           docker run --rm \
             -v ${{ github.workspace }}:/app \
-            ghcr.io/${{ github.repository }}:latest ${{ steps.find_file.outputs.target }}
+            $IMAGE_NAME ${{ steps.find_file.outputs.target }}
