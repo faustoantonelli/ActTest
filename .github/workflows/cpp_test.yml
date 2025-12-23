@@ -1,35 +1,60 @@
-name: C++ Docker Stress Tester
+name: Build and Test System
 
 on:
   push:
-    branches: ["**"]
-    paths: ["**.py", "**.js", "**.ts", "**.cpp", "**.m"] # Aggiunto .m
+    paths:
+      - 'docker/**'      # Se cambia il Dockerfile o il tester
+      - '**.cpp'         # Se cambia il codice del Traction Control
+      - '**.py'
+      - '**.m'
+      - '**.tex'
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
-  stress-test:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
+      # 1. IDENTIFICAZIONE FILE (La logica di prima)
       - name: Trova file modificato
         id: find_file
         run: |
-          # Identifica l'ultimo file modificato tra quelli supportati
-          FILE=$(git diff --name-only HEAD^ HEAD | grep -E '\.(py|js|cpp)$' | head -1)
+          FILE=$(git diff --name-only HEAD^ HEAD | grep -E '\.(cpp|py|m|tex)$' | head -1)
           echo "target=$FILE" >> $GITHUB_OUTPUT
 
-      - name: Build Docker
-        if: steps.find_file.outputs.target != ''
-        run: docker build -t cpp-tester .
+      # 2. SETUP DOCKER (Per pubblicare l'immagine)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
-      - name: Run Test
+      - name: Log in to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 3. BUILD AND PUSH (Solo se cambia la cartella docker)
+      - name: Build and push image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./docker/
+          file: ./docker/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}:latest
+
+      # 4. ESECUZIONE TEST (Sempre, se c'è un file da testare)
+      - name: Run Universal Tester
         if: steps.find_file.outputs.target != ''
         run: |
-          # Avvia il container passando il file come variabile
+          # Usiamo l'immagine appena caricata (o quella già esistente)
+          docker pull ghcr.io/${{ github.repository }}:latest
           docker run --rm \
             -v ${{ github.workspace }}:/app \
-            -e TARGET_FILE=/app/${{ steps.find_file.outputs.target }} \
-            cpp-tester /app/${{ steps.find_file.outputs.target }}
+            ghcr.io/${{ github.repository }}:latest ${{ steps.find_file.outputs.target }}
