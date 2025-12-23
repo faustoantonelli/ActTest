@@ -9,6 +9,6 @@ int main() {
         return 1; // Segnala errore al tester
     }
     
-    std::cout << "Risultato: " << (100 / n) << std::endl;
+    std::cout << "Risultato: " << (100 / (n + 1) ) << std::endl;
     return 0;
 }
