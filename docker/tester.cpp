@@ -16,7 +16,7 @@ std::string generate_random_input(int num_vars) {
     std::stringstream ss;
     for (int i = 0; i < num_vars; ++i) {
         // Genera un numero tra -100.00 e 100.00 con 2 decimali
-        double r = (std::rand() % 20001 - 10000) / 100.0.0; 
+        double r = (std::rand() % 20001 - 10000) / 100.0; 
         ss << std::fixed << std::setprecision(2) << r << (i == num_vars - 1 ? "" : " ");
     }
     return ss.str();
