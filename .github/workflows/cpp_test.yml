@@ -22,20 +22,20 @@ jobs:
         with:
           fetch-depth: 2
 
-      # 1. TRASFORMA IL NOME IN MINUSCOLO (Nuovo step fondamentale)
       - name: Prepare Repository Name
         id: repo_name
         run: |
-          # Trasforma "faustoantonelli/ActTest" in "faustoantonelli/acttest"
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "lowercase=$REPO_LOWER" >> $GITHUB_OUTPUT
 
-      # 2. IDENTIFICAZIONE FILE
-      - name: Trova file modificato
+      # 1. IDENTIFICAZIONE FILE E VARIABILI (Migliorato)
+      - name: Trova file e parametri
         id: find_file
         run: |
           FILE=$(git diff --name-only HEAD^ HEAD | grep -E '\.(cpp|py|m|tex)$' | head -1)
           echo "target=$FILE" >> $GITHUB_OUTPUT
+          # Esempio: se vuoi 3 variabili, potresti cercarlo nel messaggio del commit o impostare un default
+          echo "vars=3" >> $GITHUB_OUTPUT 
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -47,22 +47,37 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 3. BUILD AND PUSH (Usando il nome minuscolo)
+      # 2. BUILD SOLO SE NECESSARIO (Ottimizzazione tempo)
       - name: Build and push image
         uses: docker/build-push-action@v4
         with:
           context: ./docker/
           file: ./docker/Dockerfile
           push: true
-          # Usiamo l'output dello step repo_name
           tags: ghcr.io/${{ steps.repo_name.outputs.lowercase }}:latest
+          # Questa riga evita di rifare tutto se i file in /docker non sono cambiati
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      # 4. ESECUZIONE TEST
+      # 3. ESECUZIONE TEST CON MULTI-INPUT
       - name: Run Universal Tester
         if: steps.find_file.outputs.target != ''
         run: |
           IMAGE_NAME="ghcr.io/${{ steps.repo_name.outputs.lowercase }}:latest"
           docker pull $IMAGE_NAME
+          # Avviamo il tester passando anche il numero di variabili
           docker run --rm \
             -v ${{ github.workspace }}:/app \
-            $IMAGE_NAME ${{ steps.find_file.outputs.target }}
+            $IMAGE_NAME ${{ steps.find_file.outputs.target }} ${{ steps.find_file.outputs.vars }}
+
+      # 4. SALVATAGGIO ARTEFATTI (Grafici e Report)
+      - name: Upload Test Artifacts
+        if: always() # Carica i file anche se il test fallisce
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-reports
+          path: |
+            *.pdf
+            *.png
+            *.log
+            html_coverage/
