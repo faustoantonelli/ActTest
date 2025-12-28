@@ -1,63 +1,80 @@
 #include <iostream>
 #include <string>
-#include <vector>
 #include <cstdlib>
 #include <ctime>
 #include <sstream>
 #include <iomanip>
 
-std::string get_ext(const std::string& f) {
-    size_t pos = f.find_last_of(".");
-    return (pos == std::string::npos) ? "" : f.substr(pos);
-}
-
-std::string generate_random_input(int num_vars) {
+// Funzione che crea il "vassoio" di 20 numeri casuali
+std::string generate_buffer_input(int count = 20) {
     std::stringstream ss;
-    for (int i = 0; i < num_vars; ++i) {
-        double r = (std::rand() % 20001 - 10000) / 100.0; 
-        ss << std::fixed << std::setprecision(2) << r << (i == num_vars - 1 ? "" : " ");
+    for (int i = 0; i < count; ++i) {
+        double r = (std::rand() % 20001 - 10000) / 100.0;
+        ss << std::fixed << std::setprecision(2) << r << " ";
     }
     return ss.str();
 }
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "::error::Uso: ./engine <file> [num_vars]" << std::endl;
+        std::cerr << "ERRORE: Manca il file da testare." << std::endl;
         return 1;
     }
 
     std::string target = argv[1];
-    int num_vars = (argc >= 3) ? std::stoi(argv[2]) : 1;
-    std::string ext = get_ext(target);
     std::srand(std::time(0));
-
-    std::cout << "::group::🚀 QA Engine: " << target << " (" << num_vars << " vars)" << std::endl;
-
+    
+    // Estrae l'estensione
+    std::string ext = target.substr(target.find_last_of(".") + 1);
     std::string run_cmd;
-    if (ext == ".cpp") {
-        if (std::system(("g++ -O3 " + target + " -o ./bin_test").c_str()) != 0) return 1;
-        run_cmd = "valgrind --leak-check=full --error-exitcode=1 ./bin_test";
-    } else if (ext == ".py") {
-        run_cmd = "python3 " + target;
-    } else if (ext == ".m") {
-        run_cmd = "octave --quiet --no-gui " + target;
-    } else if (ext == ".tex") {
-        std::cout << "::endgroup::" << std::endl;
-        return std::system(("chktex -q -n16 " + target).c_str());
-    }
+    
+    std::cout << "--- Avvio QA Engine su: " << target << " (" << ext << ") ---" << std::endl;
 
-    for (int i = 1; i <= 50; ++i) {
-        std::string input_data = generate_random_input(num_vars);
-        std::string full_cmd = "echo \"" + input_data + "\" | " + run_cmd + " > /dev/null 2>&1";
+    // --- CASO 1: DOCUMENTI (LaTeX) ---
+    if (ext == "tex") {
+        std::cout << "📄 Modalità Documento: Controllo sintassi LaTeX..." << std::endl;
+        // chktex verifica la sintassi senza compilare tutto il PDF (molto più veloce)
+        int res = std::system(("chktex -q -n16 " + target).c_str());
         
-        if (std::system(full_cmd.c_str()) != 0) {
-            std::cout << "::endgroup::" << std::endl;
-            std::cerr << "::error file=" << target << "::Fallimento test #" << i << " con input: [" << input_data << "]" << std::endl;
+        if (res == 0) {
+            std::cout << "✅ LaTeX valido." << std::endl;
+            return 0;
+        } else {
+            std::cerr << "❌ Errori di sintassi nel file LaTeX." << std::endl;
             return 1;
         }
     }
 
-    std::cout << "::endgroup::" << std::endl;
-    std::cout << "✅ QA Passata con successo." << std::endl;
+    // --- CASO 2: CODICE (C++, Python, Octave) ---
+    if (ext == "cpp") {
+        // Compila C++
+        if (std::system(("g++ -O3 " + target + " -o ./test_bin").c_str()) != 0) return 1;
+        // Esegue con Valgrind per trovare memory leak
+        run_cmd = "valgrind --leak-check=full --error-exitcode=1 ./test_bin";
+    } else if (ext == "py") {
+        run_cmd = "python3 " + target;
+    } else if (ext == "m") {
+        // Octave senza interfaccia grafica
+        run_cmd = "octave --no-gui --quiet " + target;
+    } else {
+        std::cerr << "Estensione non supportata: " << ext << std::endl;
+        return 1;
+    }
+
+    // Loop di Stress Test (50 iterazioni)
+    std::cout << "🔢 Modalità Calcolo: Avvio 50 test con input casuali..." << std::endl;
+    for (int i = 1; i <= 50; ++i) {
+        std::string input_data = generate_buffer_input(20);
+        
+        // Esegue il comando passando i numeri e nascondendo l'output (per pulizia)
+        std::string full_cmd = "echo \"" + input_data + "\" | " + run_cmd + " > /dev/null 2>&1";
+        
+        if (std::system(full_cmd.c_str()) != 0) {
+            std::cerr << "[FALLITO] Test #" << i << " su " << target << std::endl;
+            return 1;
+        }
+    }
+
+    std::cout << "[OK] Tutti i 50 test passati! ✅" << std::endl;
     return 0;
 }

@@ -2,13 +2,13 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Installa C++, Python, Octave, Valgrind e ChkTex (per LaTeX)
 RUN apt-get update && apt-get install -y \
     g++ \
+    valgrind \
     python3 \
     octave \
-    valgrind \
     chktex \
-    clang-format \
     && rm -rf /var/lib/apt/lists/*
 
 COPY tester.cpp /tester.cpp
