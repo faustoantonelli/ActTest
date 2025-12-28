@@ -2,7 +2,7 @@
 #include <fstream>
 
 /**
- * Calcola la somma dei primi due numeri e sottrae il terzo.
+ * Calcola la SOMMA dei primi due numeri e sottrae il terzo.
  * Salva il risultato nel file di log per gli Artifacts.
  */
 void execute_simple_math(double a, double b, double c) {
