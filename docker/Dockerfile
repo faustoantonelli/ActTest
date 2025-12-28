@@ -1,28 +1,42 @@
-# 1. Base: GCC per C++ moderno
+# 1. Base: Immagine ufficiale GCC (Debian-based)
 FROM gcc:latest
 
 # Evita interazioni durante l'installazione
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 2. Installazione di tutti i motori di debug e runtime
-RUN apt-get update && apt-get install -y \
-    python3 \
+# 2. Installazione strumenti di build, analisi, runtime e reportistica
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Supporto Matlab/Octave (Aggiunto di nuovo)
     octave \
-    # LaTeX e il suo debugger (ChkTeX)
-    texlive-latex-base \
-    chktex \
-    # Strumenti di analisi "normali" per C++
+    # Automazione e Download
+    cmake \
+    ninja-build \
+    git \
+    ca-certificates \
+    # Runtime e Scripting
+    python3 \
+    python3-pip \
+    # Analisi Qualità (Static & Dynamic)
     cppcheck \
+    clang-format \
+    clang-tidy \
     valgrind \
+    gdb \
+    lcov \
+    # Documentazione e Reportistica
+    texlive-latex-base \
+    texlive-fonts-recommended \
+    latexmk \
+    chktex \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Configurazione cartella di lavoro
 WORKDIR /app
 
 # 4. Preparazione del motore di test universale
-# Copiamo il tester.cpp che abbiamo aggiornato poco fa
+# Copiamo il tuo tester.cpp (assicurati che sia nella stessa cartella del Dockerfile)
 COPY tester.cpp /tester.cpp
 RUN g++ -O3 /tester.cpp -o /engine
 
-# 5. Punto di ingresso: il container eseguirà il tester ogni volta
+# 5. Punto di ingresso
 ENTRYPOINT ["/engine"]
