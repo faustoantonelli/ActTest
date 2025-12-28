@@ -18,23 +18,30 @@ jobs:
         with:
           fetch-depth: 2
 
-      # Identifica il file modificato (Supporta cpp, py, m, tex) e previene crash Git
+      # --- QUI C'È LA MODIFICA FONDAMENTALE (IL PARACADUTE) ---
       - name: Trova File Modificato
         id: find
         continue-on-error: true
         run: |
-          # Cerca tra cpp, py, m, tex ma ignora modifiche dentro la cartella docker/
+          # Tentativo 1: Chiediamo a Git cosa è cambiato
           TARGET=$(git diff --name-only HEAD^ HEAD 2>/dev/null | grep -v "docker/" | grep -E '\.(cpp|py|m|tex)$' | head -1) || true
           
-          # Fallback: se non trova nulla (es. primo push), non rompere tutto
+          # Tentativo 2 (PARACADUTE): Se Git non risponde, cerchiamo noi il file nella cartella!
           if [ -z "$TARGET" ]; then
-             echo "Nessun file target trovato o modifica solo interna a docker."
-          else
-             echo "File individuato: $TARGET"
-             echo "target=$TARGET" >> $GITHUB_OUTPUT
+             echo "⚠️ Git non ha trovato modifiche. Cerco file manualmente..."
+             # Cerca un file .cpp, .py, .m o .tex che NON sia il tester.cpp
+             TARGET=$(find . -maxdepth 1 -type f | grep -E '\.(cpp|py|m|tex)$' | grep -v "tester.cpp" | head -1 | sed 's|./||')
           fi
 
-      # Build Locale (Veloce e senza login/permessi)
+          if [ -z "$TARGET" ]; then
+             echo "❌ Nessun file da testare trovato."
+          else
+             echo "✅ File individuato: $TARGET"
+             echo "target=$TARGET" >> $GITHUB_OUTPUT
+          fi
+      # ---------------------------------------------------------
+
+      # Build Locale (Veloce, nessun login richiesto)
       - name: Build Engine
         if: steps.find.outputs.target != ''
         run: docker build -t qa-engine ./docker
