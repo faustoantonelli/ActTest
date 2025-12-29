@@ -3,7 +3,6 @@ name: Universal QA System
 on:
   push:
     paths:
-      - 'docker/**'
       - '**.cpp'
       - '**.py'
       - '**.m'
@@ -15,34 +14,27 @@ jobs:
     steps:
       - name: Checkout Codice
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Trova File Modificato
-        id: find
-        run: |
-          # Cerchiamo il file ignorando SEMPRE tester.cpp e la cartella docker
-          TARGET=$(git diff --name-only HEAD^ HEAD 2>/dev/null | grep -E '\.(cpp|py|m|tex)$' | grep -v "tester.cpp" | grep -v "docker/" | head -1) || true
-          
-          if [ -z "$TARGET" ]; then
-             TARGET=$(find . -maxdepth 1 -type f | grep -E '\.(cpp|py|m|tex)$' | grep -v "tester.cpp" | head -1 | sed 's|./||')
-          fi
-
-          if [ -z "$TARGET" ]; then
-             echo "❌ Nessun file valido da testare."
-             exit 1
-          else
-             echo "target=$TARGET" >> $GITHUB_OUTPUT
-          fi
 
       - name: Build Engine
         run: docker build -t qa-engine -f docker/Dockerfile .
 
-      - name: Run Engine
+      - name: Run Engine su tutti i file
         run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/github/workspace \
-            qa-engine ${{ steps.find.outputs.target }}
+          # 1. Prepariamo il file di log (vuoto all'inizio)
+          echo "--- REPORT QA GLOBALE ---" > qa_report.log
+          
+          # 2. Troviamo TUTTI i file validi (escludendo il tester e la cartella docker)
+          FILES=$(find . -maxdepth 1 -type f | grep -E '\.(cpp|py|m|tex)$' | grep -v "tester.cpp" | sed 's|./||')
+          
+          # 3. Ciclo per testarli uno ad uno
+          for file in $FILES; do
+            echo "------------------------------------------------"
+            echo "🚀 ANALISI IN CORSO SU: $file"
+            echo "------------------------------------------------"
+            
+            # Eseguiamo il container passandogli il nome del file corrente
+            docker run --rm -v ${{ github.workspace }}:/github/workspace qa-engine "$file"
+          done
 
       - name: Upload Report
         if: always()
