@@ -6,8 +6,8 @@ on:
       - 'docker/**'
       - '**.cpp'
       - '**.py'
-      - '**.m'    # Supporto Octave/Matlab
-      - '**.tex'  # Supporto LaTeX
+      - '**.m'
+      - '**.tex'
 
 jobs:
   qa-test:
@@ -18,45 +18,44 @@ jobs:
         with:
           fetch-depth: 2
 
-      # --- QUI C'È LA MODIFICA FONDAMENTALE (IL PARACADUTE) ---
       - name: Trova File Modificato
         id: find
         continue-on-error: true
         run: |
-          # Tentativo 1: Chiediamo a Git cosa è cambiato
+          # 1. Ricerca tramite Git Diff
           TARGET=$(git diff --name-only HEAD^ HEAD 2>/dev/null | grep -v "docker/" | grep -E '\.(cpp|py|m|tex)$' | head -1) || true
           
-          # Tentativo 2 (PARACADUTE): Se Git non risponde, cerchiamo noi il file nella cartella!
+          # 2. Paracadute (Ricerca Manuale)
           if [ -z "$TARGET" ]; then
-             echo "⚠️ Git non ha trovato modifiche. Cerco file manualmente..."
-             # Cerca un file .cpp, .py, .m o .tex che NON sia il tester.cpp
+             echo "⚠️ Git non ha trovato modifiche. Cerco manualmente..."
              TARGET=$(find . -maxdepth 1 -type f | grep -E '\.(cpp|py|m|tex)$' | grep -v "tester.cpp" | head -1 | sed 's|./||')
           fi
 
           if [ -z "$TARGET" ]; then
-             echo "❌ Nessun file da testare trovato."
+             echo "❌ Nessun file trovato."
+             exit 1
           else
              echo "✅ File individuato: $TARGET"
              echo "target=$TARGET" >> $GITHUB_OUTPUT
           fi
-      # ---------------------------------------------------------
 
-      # Build Locale (Veloce, nessun login richiesto)
+      # MODIFICA: Build dalla ROOT per vedere tester.cpp 
       - name: Build Engine
         if: steps.find.outputs.target != ''
-        run: docker build -t qa-engine ./docker
+        run: docker build -t qa-engine -f docker/Dockerfile .
 
-      # Esecuzione Tester
+      # MODIFICA: Mapping del volume su /github/workspace 
       - name: Run Engine
         if: steps.find.outputs.target != ''
         run: |
           docker run --rm \
-            -v ${{ github.workspace }}:/app \
+            -v ${{ github.workspace }}:/github/workspace \
             qa-engine ${{ steps.find.outputs.target }}
 
+      # MODIFICA: Upload mirato dei log prodotti da tester.cpp 
       - name: Upload Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reports
-          path: "*.log"
+          name: qa-engine-reports
+          path: qa_report.log
