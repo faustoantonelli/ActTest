@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
     // --- FASE 1: ANALISI STATICA (Solo per C++) ---
     if (ext == "cpp") {
         std::cout << "🔍 Analisi Statica (cppcheck)..." << std::endl;
-        std::string check_cmd = "cppcheck --enable=all --error-exitcode=1 " + safe_target + " 2>> qa_report.log";
+        std::string check_cmd = "cppcheck --enable=all --suppress=missingIncludeSystem --error-exitcode=1 " + safe_target + " 2>> qa_report.log";
         if (std::system(check_cmd.c_str()) != 0) {
             std::cerr << "❌ Qualità codice insufficiente (vedi qa_report.log)" << std::endl;
             return 1;
