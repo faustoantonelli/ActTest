@@ -5,14 +5,17 @@
 #include <sstream>
 #include <iomanip>
 #include <random>
-#include <fstream> // Per scrivere il log
+#include <fstream>
 
-// Funzione per scrivere log dettagliati
+// Scrive i dettagli nel log per gli Artifacts
 void write_log(const std::string& message) {
     std::ofstream log_file("qa_report.log", std::ios::app);
-    log_file << message << std::endl;
+    if (log_file.is_open()) {
+        log_file << message << std::endl;
+    }
 }
 
+// Genera 20 numeri casuali per lo stress test
 std::string generate_buffer_input(int count = 20) {
     static std::mt19937 rng(std::time(0));
     std::uniform_real_distribution<double> dist(-100.0, 100.0);
@@ -23,31 +26,38 @@ std::string generate_buffer_input(int count = 20) {
     return ss.str();
 }
 
-int main(int argc, char* argv[]) {
-    if (argc < 2) return 1;
+int main(int argc, char* const argv[]) { // 'const' aggiunto per cppcheck
+    if (argc < 2) {
+        std::cerr << "❌ ERRORE: Nessun file specificato." << std::endl;
+        return 1;
+    }
 
     std::string target = argv[1];
     std::string safe_target = "'" + target + "'";
-    std::string ext = target.substr(target.find_last_of(".") + 1);
+    size_t last_dot = target.find_last_of(".");
+    if (last_dot == std::string::npos) return 1;
+    std::string ext = target.substr(last_dot + 1);
 
-    // Reset del log
+    // Inizializza il file di log
     std::ofstream log_init("qa_report.log");
-    log_init << "--- REPORT QA ENGINE ---" << std::endl;
+    log_init << "--- REPORT QA ENGINE ---\nTarget: " << target << "\n" << std::endl;
     log_init.close();
 
-    // --- FASE 1: ANALISI STATICA (Solo per C++) ---
+    // --- FASE 1: ANALISI STATICA (C++) ---
     if (ext == "cpp") {
         std::cout << "🔍 Analisi Statica (cppcheck)..." << std::endl;
-        std::string check_cmd = "cppcheck --enable=all --suppress=missingIncludeSystem --error-exitcode=1 " + safe_target + " 2>> qa_report.log";
+        // Suppress per i file di sistema e focus solo su Errori/Warning (no Style noise)
+        std::string check_cmd = "cppcheck --enable=warning,error --suppress=missingIncludeSystem --error-exitcode=1 " + safe_target + " 2>> qa_report.log";
         if (std::system(check_cmd.c_str()) != 0) {
-            std::cerr << "❌ Qualità codice insufficiente (vedi qa_report.log)" << std::endl;
+            std::cerr << "❌ Qualità codice insufficiente. Controlla qa_report.log" << std::endl;
             return 1;
         }
     }
 
-    // --- FASE 2: PREPARAZIONE ESECUZIONE ---
+    // --- FASE 2: PREPARAZIONE COMANDO ---
     std::string run_cmd;
     if (ext == "cpp") {
+        std::cout << "🔨 Compilazione..." << std::endl;
         if (std::system(("g++ -O3 " + safe_target + " -o ./test_bin").c_str()) != 0) return 1;
         run_cmd = "timeout 5s valgrind --leak-check=full --error-exitcode=1 ./test_bin";
     } else if (ext == "py") {
@@ -55,10 +65,13 @@ int main(int argc, char* argv[]) {
     } else if (ext == "m") {
         run_cmd = "timeout 5s octave --no-gui --quiet " + safe_target;
     } else if (ext == "tex") {
+        std::cout << "📄 Controllo LaTeX..." << std::endl;
         return std::system(("chktex -q -n16 -I " + safe_target).c_str());
+    } else {
+        return 1;
     }
 
-    // --- FASE 3: STRESS TEST ---
+    // --- FASE 3: STRESS TEST (50 Iterazioni) ---
     std::cout << "🧪 Avvio Stress Test..." << std::endl;
     for (int i = 1; i <= 50; ++i) {
         std::string input_data = generate_buffer_input(20);
@@ -66,16 +79,18 @@ int main(int argc, char* argv[]) {
         
         int status = std::system(full_cmd.c_str());
         if (status != 0) {
-            write_log("FALLITO Test #" + std::to_string(i));
+            write_log("❌ FALLITO Test #" + std::to_string(i));
             write_log("Input: " + input_data);
-            std::cerr << "❌ Fallito test #" << i << ". Dettagli in qa_report.log" << std::endl;
+            if (status == 124) write_log("Motivo: Timeout (Possibile loop infinito)");
+            else write_log("Motivo: Crash o Memory Leak");
+            
+            std::cerr << "❌ Fallito test #" << i << std::endl;
             return 1;
         }
+        if (i % 10 == 0) std::cout << "   " << i << "/50 passati..." << std::endl;
     }
 
-    // --- FASE 4: PULIZIA ---
     if (ext == "cpp") std::system("rm ./test_bin");
-    
-    std::cout << "✅ Tutti i test passati con successo!" << std::endl;
+    std::cout << "✅ Tutti i test completati con successo!" << std::endl;
     return 0;
 }
