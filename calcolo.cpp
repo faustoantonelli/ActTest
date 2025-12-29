@@ -1,5 +1,6 @@
 #include <iostream>
 
+
 int main() {
     double a, b, c;
     // Legge i primi 3 numeri dei 20 inviati dal tester
