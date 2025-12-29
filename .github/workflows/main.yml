@@ -20,42 +20,33 @@ jobs:
 
       - name: Trova File Modificato
         id: find
-        continue-on-error: true
         run: |
-          # 1. Ricerca tramite Git Diff
-          TARGET=$(git diff --name-only HEAD^ HEAD 2>/dev/null | grep -v "docker/" | grep -E '\.(cpp|py|m|tex)$' | head -1) || true
+          # Cerchiamo il file ignorando SEMPRE tester.cpp e la cartella docker
+          TARGET=$(git diff --name-only HEAD^ HEAD 2>/dev/null | grep -E '\.(cpp|py|m|tex)$' | grep -v "tester.cpp" | grep -v "docker/" | head -1) || true
           
-          # 2. Paracadute (Ricerca Manuale)
           if [ -z "$TARGET" ]; then
-             echo "⚠️ Git non ha trovato modifiche. Cerco manualmente..."
              TARGET=$(find . -maxdepth 1 -type f | grep -E '\.(cpp|py|m|tex)$' | grep -v "tester.cpp" | head -1 | sed 's|./||')
           fi
 
           if [ -z "$TARGET" ]; then
-             echo "❌ Nessun file trovato."
+             echo "❌ Nessun file valido da testare."
              exit 1
           else
-             echo "✅ File individuato: $TARGET"
              echo "target=$TARGET" >> $GITHUB_OUTPUT
           fi
 
-      # MODIFICA: Build dalla ROOT per vedere tester.cpp 
       - name: Build Engine
-        if: steps.find.outputs.target != ''
         run: docker build -t qa-engine -f docker/Dockerfile .
 
-      # MODIFICA: Mapping del volume su /github/workspace 
       - name: Run Engine
-        if: steps.find.outputs.target != ''
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/github/workspace \
             qa-engine ${{ steps.find.outputs.target }}
 
-      # MODIFICA: Upload mirato dei log prodotti da tester.cpp 
       - name: Upload Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: qa-engine-reports
+          name: qa-reports
           path: qa_report.log
