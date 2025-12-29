@@ -7,6 +7,7 @@
 #include <random>
 #include <fstream>
 
+// Funzione per scrivere nel log (usata per ogni test)
 void write_log(const std::string& message) {
     std::ofstream log_file("qa_report.log", std::ios::app);
     if (log_file.is_open()) log_file << message << std::endl;
@@ -27,26 +28,19 @@ int main(int argc, char* const argv[]) {
 
     std::string target = argv[1];
     std::string safe_target = "'" + target + "'";
-    size_t last_dot = target.find_last_of(".");
-    if (last_dot == std::string::npos) return 1;
-    std::string ext = target.substr(last_dot + 1);
+    std::string ext = target.substr(target.find_last_of(".") + 1);
 
+    // Reset log e intestazione
     std::ofstream log_init("qa_report.log");
     log_init << "--- REPORT QA ENGINE ---\nTarget: " << target << "\n" << std::endl;
     log_init.close();
 
-    // --- FASE 1: ANALISI STATICA (C++) ---
     if (ext == "cpp") {
         std::cout << "🔍 Analisi Statica (cppcheck)..." << std::endl;
-        // CORREZIONE: Usiamo solo --enable=warning. Gli 'error' sono inclusi automaticamente.
         std::string check_cmd = "cppcheck --enable=warning --suppress=missingIncludeSystem --error-exitcode=1 " + safe_target + " 2>> qa_report.log";
-        if (std::system(check_cmd.c_str()) != 0) {
-            std::cerr << "❌ Qualità codice insufficiente (vedi qa_report.log)" << std::endl;
-            return 1;
-        }
+        if (std::system(check_cmd.c_str()) != 0) return 1;
     }
 
-    // --- FASE 2: PREPARAZIONE ESECUZIONE ---
     std::string run_cmd;
     if (ext == "cpp") {
         if (std::system(("g++ -O3 " + safe_target + " -o ./test_bin").c_str()) != 0) return 1;
@@ -59,21 +53,40 @@ int main(int argc, char* const argv[]) {
         return std::system(("chktex -q -n16 -I " + safe_target).c_str());
     }
 
-    // --- FASE 3: STRESS TEST ---
     std::cout << "🧪 Avvio Stress Test (50 cicli)..." << std::endl;
+    
     for (int i = 1; i <= 50; ++i) {
         std::string input_data = generate_buffer_input(20);
-        std::string full_cmd = "echo \"" + input_data + "\" | " + run_cmd + " > /dev/null 2>&1";
         
-        if (std::system(full_cmd.c_str()) != 0) {
-            write_log("❌ FALLITO Test #" + std::to_string(i));
-            write_log("Input: " + input_data);
-            std::cerr << "❌ Fallito test #" << i << ". Controlla i log." << std::endl;
+        // MODIFICA: Scriviamo l'input nel log PRIMA del test
+        write_log(">>> TEST #" + std::to_string(i));
+        write_log("INPUT: " + input_data);
+
+        // MODIFICA: Invece di mandare l'output a /dev/null, lo salviamo in un file temporaneo
+        std::string full_cmd = "echo \"" + input_data + "\" | " + run_cmd + " > temp_res.txt 2>&1";
+        int status = std::system(full_cmd.c_str());
+
+        // Leggiamo cosa ha risposto il tuo codice dal file temporaneo
+        std::ifstream res_file("temp_res.txt");
+        std::stringstream output_buf;
+        output_buf << res_file.rdbuf();
+        std::string output = output_buf.str();
+        
+        write_log("OUTPUT: " + (output.empty() ? "(nessun output)" : output));
+
+        if (status != 0) {
+            write_log("❌ RISULTATO: FALLITO (Status: " + std::to_string(status) + ")");
+            std::cerr << "❌ Fallito test #" << i << std::endl;
             return 1;
         }
+        
+        write_log("✅ RISULTATO: OK\n---------------------------------");
+        if (i % 10 == 0) std::cout << "   " << i << "/50 completati..." << std::endl;
     }
 
     if (ext == "cpp") std::system("rm ./test_bin");
-    std::cout << "✅ QA Completato con successo!" << std::endl;
+    std::system("rm temp_res.txt"); // Pulizia
+    
+    std::cout << "✅ QA Completato! Scarica gli artifacts per il log completo." << std::endl;
     return 0;
 }
