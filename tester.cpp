@@ -53,6 +53,8 @@ int main(int argc, char* const argv[]) {
         run_cmd = "timeout 2s valgrind --leak-check=full --error-exitcode=1 ./bin";
     } else if (ext == "py") {
         run_cmd = "timeout 2s python3 " + target;
+    } else if (ext == "m") {
+    run_cmd = "timeout 2s octave --no-gui --quiet " + target;
     } else if (ext == "tex") {
         int res = std::system(("chktex -q -n16 " + target + " >/dev/null 2>&1").c_str());
         write_log("Note: " + std::string(res == 0 ? "LaTeX OK" : "LaTeX Avvisi")); return 0;
