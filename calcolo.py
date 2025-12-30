@@ -5,7 +5,7 @@ def main():
     dati = sys.stdin.read().split()
     if len(dati) >= 3:
         a, b, c = map(float, dati[:3])
-        print(f"Somma Python: {a + b + c}")
+        print(f"Somma Python: {a + b + c + 1000}")
 
 if __name__ == "__main__":
     main()
