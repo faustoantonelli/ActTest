@@ -54,11 +54,56 @@ int main(int argc, char* const argv[]) {
     } else if (ext == "py") {
         run_cmd = "timeout 2s python3 " + target;
     } else if (ext == "m") {
-    run_cmd = "timeout 2s octave --no-gui --quiet " + target;
+        run_cmd = "timeout 2s octave --no-gui --quiet " + target;
     } else if (ext == "tex") {
-        int res = std::system(("chktex -q -n16 " + target + " >/dev/null 2>&1").c_str());
-        write_log("Note: " + std::string(res == 0 ? "LaTeX OK" : "LaTeX Avvisi")); return 0;
-    } else { return 0; }
+        write_log("--- REPORT DETTAGLIATO LATEX ---");
+
+        // 1. CONTROLLO ORTOGRAFICO (Aspell)
+        write_log("--- ERRORI ORTOGRAFICI (Dizionario Italiano) ---");
+        // 'aspell list' elenca le parole errate. Le salviamo in un file temporaneo.
+        std::system(("aspell list -t -l it < " + target + " | sort -u > tmp_spelling.txt").c_str());
+        std::ifstream sp_file("tmp_spelling.txt");
+        std::string word;
+        bool has_spelling_errors = false;
+        while (sp_file >> word) {
+            write_log("Parola sospetta: " + word);
+            has_spelling_errors = true;
+        }
+        if (!has_spelling_errors) write_log("Nessun errore ortografico trovato.");
+
+        // 2. LOG ANALYSIS (Riferimenti e Citazioni mancanti)
+        write_log("\n--- ANALISI RIFERIMENTI (Log Analysis) ---");
+        // Eseguiamo una compilazione "fantasma" per generare il file .log
+        std::system(("pdflatex -interaction=batchmode -draftmode " + target + " >/dev/null 2>&1").c_str());
+        std::string log_name = target.substr(0, target.find_last_of(".")) + ".log";
+        // Cerchiamo i "Warning" nel file log appena creato
+        std::system(("grep -E 'Warning: (Reference|Citation).*undefined' " + log_name + " > tmp_warnings.txt").c_str());
+        std::ifstream warn_file("tmp_warnings.txt");
+        std::string line;
+        bool has_warnings = false;
+        while (std::getline(warn_file, line)) {
+            write_log(line);
+            has_warnings = true;
+        }
+        if (!has_warnings) write_log("Tutti i riferimenti e le citazioni sono corretti.");
+
+        // 3. SUGGERIMENTI SINTASSI (ChkTeX)
+        write_log("\n--- SUGGERIMENTI SINTASSI E STILE ---");
+        // -f definisce il formato: Riga e Messaggio
+        std::system(("chktex -q -f 'Riga %l: %m\\n' -n16 " + target + " > tmp_syntax.txt").c_str());
+        std::ifstream syn_file("tmp_syntax.txt");
+        bool has_syntax = false;
+        while (std::getline(syn_file, line)) {
+            write_log(line);
+            has_syntax = true;
+        }
+        if (!has_syntax) write_log("Sintassi impeccabile.");
+
+        // Pulizia file temporanei
+        std::system("rm -f tmp_spelling.txt tmp_warnings.txt tmp_syntax.txt *.aux *.log *.out");
+        return 0;
+    }
+     else { return 0; }
 
     // Eseguiamo 10 test rapidi per file per brevità
     for (int i = 1; i <= 10; ++i) {
